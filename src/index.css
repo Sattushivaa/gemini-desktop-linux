@@ -220,11 +220,58 @@
   max-width: 100%;
   border-radius: 6px;
 }
-.md .katex-display {
+
+/* ---------- KaTeX math styling ---------- */
+.katex {
+  font-size: 1.05em;
+  text-rendering: auto;
+  border-color: currentColor;
+}
+.katex * {
+  border-color: currentColor;
+}
+.katex .frac-line {
+  border-bottom-color: currentColor !important;
+  border-bottom-width: 0.05em !important;
+}
+.katex .overline-line {
+  border-top-color: currentColor !important;
+  border-top-width: 0.05em !important;
+}
+.katex .underline-line {
+  border-bottom-color: currentColor !important;
+  border-bottom-width: 0.05em !important;
+}
+.katex .sqrt-line {
+  border-top-color: currentColor !important;
+  border-top-width: 0.05em !important;
+}
+.katex .stretchy {
+  border-color: currentColor !important;
+}
+.katex .delimsizing {
+  line-height: 1;
+}
+.katex-display {
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0.2em 0;
+  padding: 0.5em 0;
+  margin: 0.8em 0;
+  text-align: center;
 }
+.katex-display > .katex {
+  display: inline-block;
+  text-align: initial;
+  max-width: 100%;
+}
+.katex-display::-webkit-scrollbar {
+  height: 6px;
+}
+.katex-display::-webkit-scrollbar-thumb {
+  background: #333a47;
+  border-radius: 3px;
+}
+
 
 /* highlight.js on a neutral dark background */
 .hljs {

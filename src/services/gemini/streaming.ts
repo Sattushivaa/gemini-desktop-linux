@@ -67,7 +67,11 @@ export async function generateStream(
   }
 
   const ai = await getClient(key);
-  const contents: Content[] = historyToContents(history);
+  // Exclude the current prompt turn if it was already appended to history store before streaming
+  const priorHistory = history.filter(
+    (m, idx) => !(idx === history.length - 1 && m.role === "user" && m.content.trim() === prompt.trim()),
+  );
+  const contents: Content[] = historyToContents(priorHistory);
 
   // Build the current user turn (text + attachments).
   const userParts: Part[] = [];

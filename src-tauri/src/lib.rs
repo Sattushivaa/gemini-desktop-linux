@@ -20,6 +20,16 @@ pub fn run() {
                 .add_migrations("sqlite:gemini-desktop.db", MIGRATIONS.into_iter().collect())
                 .build(),
         )
+        .setup(|app| {
+            use tauri::Manager;
+            if let Ok(dir) = app.path().app_data_dir() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            if let Ok(dir) = app.path().app_config_dir() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::config::get_config,
             commands::config::set_api_key,
@@ -28,6 +38,7 @@ pub fn run() {
             commands::files::read_file_text,
             commands::files::read_file_base64,
             commands::files::write_text_file,
+            commands::files::check_is_file,
             commands::paths::get_app_paths,
         ])
         .run(tauri::generate_context!())

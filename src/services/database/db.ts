@@ -4,17 +4,33 @@ import { createSqliteBackend, type DbBackend } from "./sqliteBackend";
 import { createMemoryBackend } from "./memoryBackend";
 
 let backend: DbBackend | null = null;
+let sqliteFailed = false;
 
 /** Picks the native SQLite backend in Tauri and an in-memory one in the browser. */
 function getBackend(): DbBackend {
-  if (!backend) {
-    backend = isTauri() ? createSqliteBackend() : createMemoryBackend();
+  if (backend) return backend;
+  if (isTauri() && !sqliteFailed) {
+    try {
+      backend = createSqliteBackend();
+      return backend;
+    } catch (e) {
+      console.warn("Failed to create SQLite backend, falling back to memory backend:", e);
+      sqliteFailed = true;
+    }
   }
+  backend = createMemoryBackend();
   return backend;
 }
 
 export async function initDb(): Promise<void> {
-  await getBackend().initDb();
+  try {
+    await getBackend().initDb();
+  } catch (e) {
+    console.warn("Failed to initialize SQLite database, using fallback memory backend:", e);
+    sqliteFailed = true;
+    backend = createMemoryBackend();
+    await backend.initDb();
+  }
 }
 
 export async function pruneEmptyConversations(): Promise<void> {

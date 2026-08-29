@@ -30,7 +30,7 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/attachments/**"]
+        "scope": ["$APPDATA/**", "$APPDATA/attachments/**", "$HOME/**"]
       }
     }
   },

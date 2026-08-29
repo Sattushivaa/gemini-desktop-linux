@@ -8,6 +8,7 @@ import {
 import { ArrowUp, Paperclip, Square, AlertCircle } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { homeDir } from "@tauri-apps/api/path";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { Attachment } from "@/types";
 import { cn, uid } from "@/lib/utils";
@@ -81,12 +82,20 @@ export function Composer() {
         const mime = input.mimeType ?? input.file?.type ?? "application/octet-stream";
         const rawSize = input.size ?? input.file?.size ?? 0;
         const id = uid("att");
-        try {
-          validateAttachment(rawName, rawSize, mime);
-        } catch (e) {
-          errors.push(e instanceof Error ? e.message : "Unsupported file");
-          continue;
+
+        // For path-based files (native file picker / drag-drop in Tauri), we don't
+        // know the real size or MIME yet — Rust will infer them. Only validate
+        // client-side when we actually have a File object with real metadata.
+        const hasKnownSize = !input.path && (input.file != null || input.size != null);
+        if (hasKnownSize) {
+          try {
+            validateAttachment(rawName, rawSize, mime);
+          } catch (e) {
+            errors.push(e instanceof Error ? e.message : "Unsupported file");
+            continue;
+          }
         }
+
         next.push({
           attachment: {
             id,
@@ -119,7 +128,7 @@ export function Composer() {
               ? await invoke<Attachment>("save_attachment", {
                   sourcePath: input.path,
                   filename: rawName,
-                  mimeType: mime,
+                  mimeType: mime === "application/octet-stream" ? undefined : mime,
                 })
               : await invoke<Attachment>("save_attachment_data", {
                   filename: rawName,
@@ -127,6 +136,24 @@ export function Composer() {
                   mimeType: mime,
                 });
           }
+
+          // Post-save validation with the real size from the stored file.
+          if (input.path) {
+            try {
+              validateAttachment(stored.filename, stored.size, stored.mimeType);
+            } catch (e) {
+              errors.push(e instanceof Error ? e.message : "Unsupported file");
+              next[next.length - 1] = {
+                attachment: next[next.length - 1].attachment,
+                file: input.file ?? null,
+                status: "error",
+                error: e instanceof Error ? e.message : "Unsupported file",
+              };
+              setPending((cur) => cur.map((a) => (a.attachment.id === id ? next[next.length - 1] : a)));
+              continue;
+            }
+          }
+
           next[next.length - 1] = {
             attachment: stored,
             file: input.file ?? null,
@@ -156,18 +183,29 @@ export function Composer() {
       return;
     }
     try {
+      let defaultPath: string | undefined;
+      try {
+        defaultPath = await homeDir();
+      } catch {
+        // fallback
+      }
+
       const paths = await open({
         multiple: true,
         directory: false,
         title: "Attach files",
+        defaultPath,
         filters: [
-          { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"] },
-          { name: "Documents & source", extensions: [
-            "pdf", "txt", "md", "markdown", "csv", "json", "html", "htm", "xml", "yaml", "yml",
-            "toml", "log", "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rs", "c", "h", "cpp",
-            "cc", "hpp", "go", "java", "rb", "php", "sh", "bash", "zsh", "sql", "lua",
-          ] },
           { name: "All files", extensions: ["*"] },
+          { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"] },
+          {
+            name: "Documents & source",
+            extensions: [
+              "pdf", "txt", "md", "markdown", "csv", "json", "html", "htm", "xml", "yaml", "yml",
+              "toml", "log", "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rs", "c", "h", "cpp",
+              "cc", "hpp", "go", "java", "rb", "php", "sh", "bash", "zsh", "sql", "lua",
+            ],
+          },
         ],
       });
       if (!paths) return;
@@ -226,9 +264,10 @@ export function Composer() {
     [addAttachments],
   );
 
-  // Paste support: images (and files where the webview allows it).
+  // Paste support: images, file blobs, and copied files from file managers.
   const onPaste = useCallback(
-    (e: React.ClipboardEvent) => {
+    async (e: React.ClipboardEvent) => {
+      // 1. Check for binary File blobs (e.g. pasted screenshots / images).
       const items = Array.from(e.clipboardData?.items ?? []);
       const blobs: File[] = [];
       for (const item of items) {
@@ -237,10 +276,91 @@ export function Composer() {
           if (file) blobs.push(file);
         }
       }
-      if (blobs.length === 0) return;
-      e.preventDefault();
-      const inputs = blobs.map((f) => ({ file: f, name: f.name || "clipboard.png", mimeType: f.type }));
-      void addAttachments(inputs);
+      if (blobs.length > 0) {
+        e.preventDefault();
+        const inputs = blobs.map((f) => ({ file: f, name: f.name || "clipboard.png", mimeType: f.type }));
+        void addAttachments(inputs);
+        return;
+      }
+
+      // 2. Check for copied files from file managers (text/uri-list, x-special/gnome-copied-files, or text/plain).
+      const uriList = e.clipboardData?.getData("text/uri-list");
+      const gnomeFiles = e.clipboardData?.getData("x-special/gnome-copied-files");
+      const plainText = e.clipboardData?.getData("text/plain");
+
+      const candidateUris: string[] = [];
+
+      if (gnomeFiles) {
+        const lines = gnomeFiles.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          if (line.startsWith("file://")) {
+            candidateUris.push(line);
+          }
+        }
+      }
+
+      if (uriList) {
+        const lines = uriList.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          if (!line.startsWith("#") && line.startsWith("file://")) {
+            candidateUris.push(line);
+          }
+        }
+      }
+
+      if (plainText) {
+        const lines = plainText.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+        const allLookLikePaths =
+          lines.length > 0 &&
+          lines.every((l) => l.startsWith("file://") || (l.startsWith("/") && !l.includes("\n")));
+        if (allLookLikePaths) {
+          for (const line of lines) {
+            candidateUris.push(line);
+          }
+        }
+      }
+
+      const rawPaths = candidateUris
+        .map((uri) => {
+          let p = uri;
+          if (p.startsWith("file://localhost/")) {
+            p = p.slice("file://localhost".length);
+          } else if (p.startsWith("file:///")) {
+            p = p.slice("file://".length);
+          } else if (p.startsWith("file://")) {
+            p = p.slice("file:/".length);
+          }
+          try {
+            return decodeURIComponent(p);
+          } catch {
+            return p;
+          }
+        })
+        .filter((p) => p.length > 0);
+
+      const uniquePaths = Array.from(new Set(rawPaths));
+
+      if (uniquePaths.length > 0 && isTauri()) {
+        const existingPaths: string[] = [];
+        for (const p of uniquePaths) {
+          try {
+            const isFile = await invoke<boolean>("check_is_file", { path: p });
+            if (isFile) existingPaths.push(p);
+          } catch {
+            // ignore
+          }
+        }
+
+        if (existingPaths.length > 0) {
+          e.preventDefault();
+          const inputs = existingPaths.map((p) => {
+            const name = p.split("/").pop() ?? p;
+            return { path: p, name };
+          });
+          void addAttachments(inputs);
+          return;
+        }
+      }
     },
     [addAttachments],
   );

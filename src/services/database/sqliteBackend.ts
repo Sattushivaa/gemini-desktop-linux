@@ -44,10 +44,14 @@ export function createSqliteBackend(): DbBackend {
     if (dbClient) return;
     const db = await Database.load(DB_URL);
     await db.execute("PRAGMA journal_mode = WAL;");
+    await db.execute("PRAGMA foreign_keys = ON;");
     dbClient = db;
   }
 
-  function getDb(): Database {
+  async function getDb(): Promise<Database> {
+    if (!dbClient) {
+      await initDb();
+    }
     if (!dbClient) throw new Error("Database not initialised");
     return dbClient;
   }
@@ -56,7 +60,7 @@ export function createSqliteBackend(): DbBackend {
     initDb,
 
     async pruneEmptyConversations() {
-      const db = getDb();
+      const db = await getDb();
       await db.execute(
         `DELETE FROM conversations
          WHERE title = 'New chat'
@@ -65,33 +69,33 @@ export function createSqliteBackend(): DbBackend {
     },
 
     async listConversations() {
-      const db = getDb();
+      const db = await getDb();
       const rows = await db.select<Record<string, unknown>[]>(
         "SELECT id, title, model, created_at, updated_at FROM conversations ORDER BY updated_at DESC",
       );
       return rows.map((row: Record<string, unknown>) => ({
-        id: String(row.id),
-        title: String(row.title),
-        model: String(row.model ?? "gemini-2.5-flash"),
-        createdAt: String(row.created_at),
-        updatedAt: String(row.updated_at),
+        id: String(row.id ?? row.ID ?? ""),
+        title: String(row.title ?? row.TITLE ?? "New chat"),
+        model: String(row.model ?? row.MODEL ?? "gemini-2.5-flash"),
+        createdAt: String(row.created_at ?? row.CREATED_AT ?? new Date().toISOString()),
+        updatedAt: String(row.updated_at ?? row.UPDATED_AT ?? new Date().toISOString()),
       }));
     },
 
     async getConversation(id) {
-      const db = getDb();
+      const db = await getDb();
       const convRows = await db.select<Record<string, unknown>[]>(
         "SELECT id, title, model, created_at, updated_at FROM conversations WHERE id = ?",
         [id],
       );
-      if (convRows.length === 0) return null;
+      if (!convRows || convRows.length === 0) return null;
       const conv = convRows[0];
       const conversation: Conversation = {
-        id: String(conv.id),
-        title: String(conv.title),
-        model: String(conv.model ?? "gemini-2.5-flash"),
-        createdAt: String(conv.created_at),
-        updatedAt: String(conv.updated_at),
+        id: String(conv.id ?? conv.ID),
+        title: String(conv.title ?? conv.TITLE),
+        model: String(conv.model ?? conv.MODEL ?? "gemini-2.5-flash"),
+        createdAt: String(conv.created_at ?? conv.CREATED_AT),
+        updatedAt: String(conv.updated_at ?? conv.UPDATED_AT),
       };
 
       const msgRows = await db.select<Record<string, unknown>[]>(
@@ -99,12 +103,12 @@ export function createSqliteBackend(): DbBackend {
         [id],
       );
       const messages: Message[] = msgRows.map((row) => ({
-        id: String(row.id),
-        conversationId: String(row.conversation_id),
-        role: String(row.role) as Message["role"],
-        content: String(row.content ?? ""),
-        createdAt: String(row.created_at),
-        sequence: Number(row.sequence ?? 0),
+        id: String(row.id ?? row.ID),
+        conversationId: String(row.conversation_id ?? row.CONVERSATION_ID),
+        role: String(row.role ?? row.ROLE) as Message["role"],
+        content: String(row.content ?? row.CONTENT ?? ""),
+        createdAt: String(row.created_at ?? row.CREATED_AT),
+        sequence: Number(row.sequence ?? row.SEQUENCE ?? 0),
         attachments: [],
       }));
 
@@ -115,15 +119,15 @@ export function createSqliteBackend(): DbBackend {
         );
         const byMessage = new Map<string, Attachment[]>();
         for (const a of attRows) {
-          const mid = String(a.message_id);
+          const mid = String(a.message_id ?? a.MESSAGE_ID);
           const arr = byMessage.get(mid) ?? [];
           arr.push({
-            id: String(a.id),
-            filename: String(a.filename),
-            mimeType: String(a.mime_type),
-            kind: String(a.kind) as AttachmentKind,
-            size: Number(a.size ?? 0),
-            path: String(a.path),
+            id: String(a.id ?? a.ID),
+            filename: String(a.filename ?? a.FILENAME),
+            mimeType: String(a.mime_type ?? a.MIME_TYPE),
+            kind: String(a.kind ?? a.KIND) as AttachmentKind,
+            size: Number(a.size ?? a.SIZE ?? 0),
+            path: String(a.path ?? a.PATH),
           });
           byMessage.set(mid, arr);
         }
@@ -136,7 +140,7 @@ export function createSqliteBackend(): DbBackend {
     },
 
     async createConversation(input) {
-      const db = getDb();
+      const db = await getDb();
       await db.execute(
         "INSERT INTO conversations (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
         [input.id, input.title, input.model, input.createdAt, input.createdAt],
@@ -144,27 +148,38 @@ export function createSqliteBackend(): DbBackend {
     },
 
     async renameConversation(id, title) {
-      const db = getDb();
+      const db = await getDb();
       await db.execute("UPDATE conversations SET title = ? WHERE id = ?", [title, id]);
     },
 
     async touchConversation(id, updatedAt) {
-      const db = getDb();
+      const db = await getDb();
       await db.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", [updatedAt, id]);
     },
 
     async deleteConversation(id) {
-      const db = getDb();
+      const db = await getDb();
       await db.execute("DELETE FROM conversations WHERE id = ?", [id]);
     },
 
     async appendMessage(input) {
-      const db = getDb();
-      const result = await db.select<{ n: number }[]>(
-        "SELECT COALESCE(MAX(sequence), -1) + 1 AS n FROM messages WHERE conversation_id = ?",
+      const db = await getDb();
+      const result = await db.select<Record<string, unknown>[]>(
+        "SELECT MAX(sequence) AS max_seq FROM messages WHERE conversation_id = ?",
         [input.conversationId],
       );
-      const sequence = result[0]?.n ?? 0;
+      const first = result && result[0];
+      let maxSeq: number | null = null;
+      if (first) {
+        for (const key of Object.keys(first)) {
+          const val = first[key];
+          if (val !== null && val !== undefined && !isNaN(Number(val))) {
+            maxSeq = Number(val);
+            break;
+          }
+        }
+      }
+      const sequence = maxSeq !== null ? maxSeq + 1 : 0;
       await db.execute(
         "INSERT INTO messages (id, conversation_id, role, content, created_at, sequence) VALUES (?, ?, ?, ?, ?, ?)",
         [input.id, input.conversationId, input.role, input.content, input.createdAt, sequence],
@@ -178,13 +193,13 @@ export function createSqliteBackend(): DbBackend {
     },
 
     async updateMessageContent(id, content) {
-      const db = getDb();
+      const db = await getDb();
       await db.execute("UPDATE messages SET content = ? WHERE id = ?", [content, id]);
     },
 
     async searchConversations(query) {
       if (!query.trim()) return [];
-      const db = getDb();
+      const db = await getDb();
       const like = `%${query.trim()}%`;
       const rows = await db.select<Record<string, unknown>[]>(
         `SELECT DISTINCT c.id, c.title, c.updated_at,
@@ -199,10 +214,10 @@ export function createSqliteBackend(): DbBackend {
         [like, like, like],
       );
       return rows.map((r) => ({
-        conversationId: String(r.id),
-        title: String(r.title),
-        snippet: String(r.snippet ?? ""),
-        updatedAt: String(r.updated_at),
+        conversationId: String(r.id ?? r.ID),
+        title: String(r.title ?? r.TITLE),
+        snippet: String(r.snippet ?? r.SNIPPET ?? ""),
+        updatedAt: String(r.updated_at ?? r.UPDATED_AT),
       }));
     },
   };

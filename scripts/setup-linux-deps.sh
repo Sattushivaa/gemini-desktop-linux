@@ -39,8 +39,11 @@ for f in *.deb; do dpkg-deb -x "$f" "$PREFIX"; done
 # Merge the ./usr subtree up so headers land under $PREFIX/include etc.
 if [ -d "$PREFIX/usr" ]; then cp -a "$PREFIX/usr/." "$PREFIX"; rm -rf "$PREFIX/usr"; fi
 
-# 3. Rewrite .pc prefixes from /usr to the local prefix.
-find "$PREFIX" -name '*.pc' -print0 | xargs -0 sed -i "s|/usr|$PREFIX|g"
+# 3. Rewrite .pc includedir to local prefix while keeping runtime libdir/exec_prefix under /usr
+find "$PREFIX" -name '*.pc' -print0 | xargs -0 sed -i "s|includedir=/usr|includedir=$PREFIX|g"
+find "$PREFIX" -name '*.pc' -print0 | xargs -0 sed -i "s|prefix=/usr|prefix=$PREFIX|g"
+find "$PREFIX" -name '*.pc' -print0 | xargs -0 sed -i "s|exec_prefix=$PREFIX|exec_prefix=/usr|g"
+find "$PREFIX" -name '*.pc' -print0 | xargs -0 sed -i "s|libdir=$PREFIX|libdir=/usr|g"
 
 # 4. Point dangling .so symlinks at the system runtime libraries.
 SYS=/usr/lib/x86_64-linux-gnu

@@ -53,10 +53,15 @@ export const useConversationStore = create<ConversationState>((set, get) => {
 
     init: async () => {
       if (get().ready) return;
-      await db.initDb();
-      await db.pruneEmptyConversations();
-      await refreshList();
-      set({ ready: true });
+      try {
+        await db.initDb();
+        await db.pruneEmptyConversations();
+        await refreshList();
+      } catch (err) {
+        console.error("Failed to initialize conversation store:", err);
+      } finally {
+        set({ ready: true });
+      }
     },
 
     newChat: async (model) => {

@@ -9,14 +9,38 @@ use tauri::Manager;
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StoredFile {
+    pub id: String,
     pub path: String,
     pub filename: String,
     pub size: u64,
     pub mime_type: String,
+    pub kind: String,
+}
+
+fn infer_kind(_name: &str, mime: &str) -> String {
+    if mime.starts_with("image/") {
+        "image".to_string()
+    } else if mime == "application/pdf" {
+        "pdf".to_string()
+    } else if mime.starts_with("text/")
+        || mime.contains("json")
+        || mime.contains("xml")
+        || mime.contains("javascript")
+        || mime.contains("typescript")
+        || mime.contains("python")
+        || mime.contains("rust")
+        || mime.contains("yaml")
+        || mime.contains("shellscript")
+    {
+        "text".to_string()
+    } else {
+        "file".to_string()
+    }
 }
 
 fn attachments_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("attachments");
+    fs::create_dir_all(&dir).map_err(|e| format!("unable to create attachments dir: {e}"))?;
     Ok(dir)
 }
 
@@ -96,12 +120,15 @@ pub fn save_attachment(
 
     let size = fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
     let mime = mime_type.unwrap_or_else(|| infer_mime(&src));
+    let kind = infer_kind(&name, &mime);
 
     Ok(StoredFile {
+        id: folder,
         path: dest.to_string_lossy().into_owned(),
         filename: name,
         size,
         mime_type: mime,
+        kind,
     })
 }
 
@@ -119,30 +146,34 @@ pub fn save_attachment_data(
         .decode(data_base64.as_bytes())
         .map_err(|e| format!("invalid base64 payload: {e}"))?;
 
+    let folder = uuid_v4();
     let base = attachments_dir(&app)?;
-    let dest_dir = base.join(uuid_v4());
+    let dest_dir = base.join(&folder);
     fs::create_dir_all(&dest_dir).map_err(|e| format!("unable to create attachment dir: {e}"))?;
 
     let dest = dest_dir.join(&name);
     fs::write(&dest, &bytes).map_err(|e| format!("unable to write attachment: {e}"))?;
 
+    let kind = infer_kind(&name, &mime_type);
     Ok(StoredFile {
+        id: folder,
         path: dest.to_string_lossy().into_owned(),
         filename: name,
         size: bytes.len() as u64,
         mime_type,
+        kind,
     })
 }
 
 /// Reads a local text/source file so it can be attached to a prompt.
-/// Returns None when the file is not valid UTF-8 or exceeds the size limit.
+/// Returns None when the file is not valid UTF-8, exceeds the size limit, or doesn't exist.
 #[tauri::command]
 pub fn read_file_text(path: String, max_bytes: Option<u64>) -> Result<Option<String>, String> {
     let p = PathBuf::from(&path);
     if !p.is_file() {
-        return Err(format!("File not found: {path}"));
+        return Ok(None);
     }
-    let limit = max_bytes.unwrap_or(2 * 1024 * 1024);
+    let limit = max_bytes.unwrap_or(100 * 1024 * 1024); // 100 MB default for JSON data files
     if fs::metadata(&p).map(|m| m.len()).unwrap_or(u64::MAX) > limit {
         return Ok(None);
     }
@@ -183,6 +214,14 @@ pub fn write_text_file(path: String, contents: String) -> Result<(), String> {
     }
     fs::write(&p, contents).map_err(|e| format!("unable to write file: {e}"))
 }
+
+/// Checks if a given path exists on the local filesystem and is a regular file.
+#[tauri::command]
+pub fn check_is_file(path: String) -> bool {
+    let p = PathBuf::from(&path);
+    p.is_file()
+}
+
 
 fn uuid_v4() -> String {
     let mut buf = [0u8; 16];

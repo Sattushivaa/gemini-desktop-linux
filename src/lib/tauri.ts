@@ -2,7 +2,10 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 /** True when running inside the Tauri webview (native APIs available). */
 export function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  return (
+    typeof window !== "undefined" &&
+    ("__TAURI_INTERNALS__" in window || "__TAURI_IPC__" in window || "__TAURI__" in window)
+  );
 }
 
 /**
