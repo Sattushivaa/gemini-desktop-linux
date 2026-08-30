@@ -7,6 +7,10 @@ Far from a browser tab: a real app window with streaming responses, conversation
 history stored locally, file attachments (images, PDFs, text/source),
 a command palette, keyboard shortcuts and native file pickers.
 
+<img width="1920" height="1060" alt="image" src="https://github.com/user-attachments/assets/c850ff91-b4e5-4dcf-8431-751ea34634b1" />
+<img width="1920" height="1060" alt="image" src="https://github.com/user-attachments/assets/75d67ba4-f2b2-4862-9847-5826c9d08155" />
+
+
 ## Features
 
 - **Streaming responses** — tokens stream in live with a blinking cursor and a
