@@ -4,7 +4,7 @@ A native Linux desktop client for Google's Gemini API — built with Tauri 2,
 React, TypeScript, Vite and SQLite.
 
 Far from a browser tab: a real app window with streaming responses, conversation
-history stored locally in SQLite, file attachments (images, PDFs, text/source),
+history stored locally, file attachments (images, PDFs, text/source),
 a command palette, keyboard shortcuts and native file pickers.
 
 ## Features

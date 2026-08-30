@@ -222,6 +222,26 @@ pub fn check_is_file(path: String) -> bool {
     p.is_file()
 }
 
+/// Reads an image from the system clipboard if available, returning base64-encoded PNG data.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn read_clipboard_image() -> Option<String> {
+    let clipboard = gtk::Clipboard::get(&gdk::SELECTION_CLIPBOARD);
+    if let Some(pixbuf) = clipboard.wait_for_image() {
+        if let Ok(buffer) = pixbuf.save_to_bufferv("png", &[]) {
+            return Some(base64::engine::general_purpose::STANDARD.encode(buffer));
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn read_clipboard_image() -> Option<String> {
+    None
+}
+
+
 
 fn uuid_v4() -> String {
     let mut buf = [0u8; 16];

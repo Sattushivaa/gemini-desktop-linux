@@ -1,4 +1,15 @@
-import { FilePlus2, Keyboard, Settings2, FileText, Search, Trash2, MessageSquare } from "lucide-react";
+import {
+  FilePlus2,
+  Keyboard,
+  Settings2,
+  FileText,
+  Search,
+  Trash2,
+  MessageSquare,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+} from "lucide-react";
 import { flushSync } from "react-dom";
 import { Command } from "cmdk";
 import { useUiStore } from "@/stores/ui";
@@ -11,6 +22,9 @@ export function CommandPalette() {
   const setOpen = useUiStore((s) => s.setCommandPaletteOpen);
   const { newChat, openConversation, remove, conversations } = useConversationStore();
   const defaultModel = useSettingsStore((s) => s.settings.defaultModel);
+  const increaseFontSize = useSettingsStore((s) => s.increaseFontSize);
+  const decreaseFontSize = useSettingsStore((s) => s.decreaseFontSize);
+  const resetFontSize = useSettingsStore((s) => s.resetFontSize);
 
   if (!open) return null;
 
@@ -48,11 +62,36 @@ export function CommandPalette() {
             <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+N</span>
           </Command.Item>
           <Command.Item
+            value="increase-font"
+            onSelect={() => run(() => increaseFontSize())}
+            className="palette-item"
+          >
+            <ZoomIn className="mr-2 h-4 w-4" /> Increase font size
+            <span className="ml-auto text-[10px] text-muted-foreground">Ctrl++</span>
+          </Command.Item>
+          <Command.Item
+            value="decrease-font"
+            onSelect={() => run(() => decreaseFontSize())}
+            className="palette-item"
+          >
+            <ZoomOut className="mr-2 h-4 w-4" /> Decrease font size
+            <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+-</span>
+          </Command.Item>
+          <Command.Item
+            value="reset-font"
+            onSelect={() => run(() => resetFontSize())}
+            className="palette-item"
+          >
+            <RotateCcw className="mr-2 h-4 w-4" /> Reset font size
+            <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+0</span>
+          </Command.Item>
+          <Command.Item
             value="settings"
             onSelect={() => run(() => useUiStore.getState().setSettingsOpen(true))}
             className="palette-item"
           >
             <Settings2 className="mr-2 h-4 w-4" /> Open settings
+            <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+,</span>
           </Command.Item>
           <Command.Item
             value="shortcuts"
@@ -62,7 +101,7 @@ export function CommandPalette() {
           >
             <Keyboard className="mr-2 h-4 w-4" /> Keyboard shortcuts —
             <span className="ml-1 truncate text-[11px] text-muted-foreground">
-              Ctrl+N · Ctrl+Shift+S · Ctrl+K · Esc
+              Ctrl+N · Ctrl++ · Ctrl+- · Ctrl+0 · Ctrl+K · Esc
             </span>
           </Command.Item>
         </Command.Group>

@@ -1,19 +1,20 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Settings } from "@/types";
-import { DEFAULT_SETTINGS, FONT_SIZES } from "@/types";
+import type { Settings, FontSize } from "@/types";
+import { DEFAULT_SETTINGS, FONT_SIZES, FONT_SIZE_ORDER } from "@/types";
 
 interface SettingsState {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
+  increaseFontSize: () => void;
+  decreaseFontSize: () => void;
+  resetFontSize: () => void;
 }
 
 function applyToDocument(settings: Settings) {
   document.documentElement.classList.toggle("dark", settings.theme === "dark");
-  document.documentElement.style.setProperty(
-    "--app-font-size",
-    `${FONT_SIZES[settings.fontSize]}px`,
-  );
+  const size = FONT_SIZES[settings.fontSize] ?? 14;
+  document.documentElement.style.setProperty("--app-font-size", `${size}px`);
 }
 
 const initial = { settings: DEFAULT_SETTINGS };
@@ -25,6 +26,33 @@ export const useSettingsStore = create<SettingsState>()(
       update: (patch) =>
         set((state) => {
           const next = { ...state.settings, ...patch };
+          applyToDocument(next);
+          return { settings: next };
+        }),
+      increaseFontSize: () =>
+        set((state) => {
+          const order = FONT_SIZE_ORDER;
+          const currentIndex = order.indexOf(state.settings.fontSize);
+          const nextIndex = Math.min(
+            order.length - 1,
+            currentIndex === -1 ? 2 : currentIndex + 1,
+          );
+          const next = { ...state.settings, fontSize: order[nextIndex] };
+          applyToDocument(next);
+          return { settings: next };
+        }),
+      decreaseFontSize: () =>
+        set((state) => {
+          const order = FONT_SIZE_ORDER;
+          const currentIndex = order.indexOf(state.settings.fontSize);
+          const prevIndex = Math.max(0, currentIndex === -1 ? 2 : currentIndex - 1);
+          const next = { ...state.settings, fontSize: order[prevIndex] };
+          applyToDocument(next);
+          return { settings: next };
+        }),
+      resetFontSize: () =>
+        set((state) => {
+          const next = { ...state.settings, fontSize: "normal" as FontSize };
           applyToDocument(next);
           return { settings: next };
         }),

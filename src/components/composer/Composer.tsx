@@ -73,6 +73,12 @@ export function Composer() {
 
   const clearAttachments = () => setPending([]);
 
+  const focusComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, []);
+
   const addAttachments = useCallback(
     async (inputs: { path?: string; file?: File; name: string; mimeType?: string; size?: number }[]) => {
       const next: AttachState[] = [];
@@ -173,8 +179,9 @@ export function Composer() {
         setBanner(errors[0]);
         window.setTimeout(() => setBanner(null), 5000);
       }
+      focusComposer();
     },
-    [],
+    [focusComposer],
   );
 
   const pickFiles = useCallback(async () => {
@@ -215,10 +222,11 @@ export function Composer() {
         return { path: p, name };
       });
       if (inputs.length > 0) void addAttachments(inputs);
+      focusComposer();
     } catch {
       setBanner("Unable to open the file picker.");
     }
-  }, [addAttachments]);
+  }, [addAttachments, focusComposer]);
 
   // Native window drag & drop gives real file paths in Tauri.
   useEffect(() => {
@@ -266,7 +274,7 @@ export function Composer() {
 
   // Paste support: images, file blobs, and copied files from file managers.
   const onPaste = useCallback(
-    async (e: React.ClipboardEvent) => {
+    async (e: React.ClipboardEvent | ClipboardEvent) => {
       // 1. Check for binary File blobs (e.g. pasted screenshots / images).
       const items = Array.from(e.clipboardData?.items ?? []);
       const blobs: File[] = [];
@@ -276,10 +284,21 @@ export function Composer() {
           if (file) blobs.push(file);
         }
       }
+      const directFiles = Array.from(e.clipboardData?.files ?? []);
+      for (const f of directFiles) {
+        if (!blobs.some((b) => b.name === f.name && b.size === f.size)) {
+          blobs.push(f);
+        }
+      }
       if (blobs.length > 0) {
         e.preventDefault();
-        const inputs = blobs.map((f) => ({ file: f, name: f.name || "clipboard.png", mimeType: f.type }));
+        const inputs = blobs.map((f) => ({
+          file: f,
+          name: f.name || "screenshot.png",
+          mimeType: f.type || "image/png",
+        }));
         void addAttachments(inputs);
+        focusComposer();
         return;
       }
 
@@ -358,16 +377,66 @@ export function Composer() {
             return { path: p, name };
           });
           void addAttachments(inputs);
+          focusComposer();
           return;
         }
       }
+
+      // 3. Fallback for native Linux clipboard images (Flameshot, GIMP, system screenshots)
+      if (isTauri()) {
+        try {
+          const imgBase64 = await invoke<string | null>("read_clipboard_image");
+          if (imgBase64) {
+            e.preventDefault();
+            const stored = await invoke<Attachment>("save_attachment_data", {
+              filename: "screenshot.png",
+              dataBase64: imgBase64,
+              mimeType: "image/png",
+            });
+            setPending((cur) => [
+              ...cur,
+              {
+                attachment: stored,
+                file: null,
+                status: "ready",
+              },
+            ]);
+            focusComposer();
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
     },
-    [addAttachments],
+    [addAttachments, focusComposer],
   );
+
+  // Global window paste listener: allows pasting screenshots/files even if textarea lost focus
+  useEffect(() => {
+    const handleWindowPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          (target.tagName === "TEXTAREA" && target !== textareaRef.current))
+      ) {
+        return;
+      }
+      if (target === textareaRef.current) {
+        return;
+      }
+      void onPaste(e);
+    };
+
+    window.addEventListener("paste", handleWindowPaste);
+    return () => window.removeEventListener("paste", handleWindowPaste);
+  }, [onPaste]);
 
   const removeAttachment = useCallback((id: string) => {
     setPending((cur) => cur.filter((a) => a.attachment.id !== id));
-  }, []);
+    focusComposer();
+  }, [focusComposer]);
 
   const onSubmit = useCallback(() => {
     if (generating) {

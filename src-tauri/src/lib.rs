@@ -39,6 +39,7 @@ pub fn run() {
             commands::files::read_file_base64,
             commands::files::write_text_file,
             commands::files::check_is_file,
+            commands::files::read_clipboard_image,
             commands::paths::get_app_paths,
         ])
         .run(tauri::generate_context!())

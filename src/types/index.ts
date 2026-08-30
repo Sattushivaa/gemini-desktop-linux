@@ -72,7 +72,15 @@ export interface AttachmentPreview {
 }
 
 export type Theme = "dark" | "light";
-export type FontSize = "small" | "normal" | "large" | "xlarge";
+export type FontSize =
+  | "xsmall"
+  | "small"
+  | "normal"
+  | "medium"
+  | "large"
+  | "xlarge"
+  | "xxlarge"
+  | "huge";
 export type SidebarBehavior = "persistent" | "auto";
 
 export interface Settings {
@@ -81,6 +89,7 @@ export interface Settings {
   sidebarBehavior: SidebarBehavior;
   fontSize: FontSize;
   defaultModel: string;
+  customModels: string[];
   temperature: number;
   maxOutputTokens: number;
 }
@@ -91,13 +100,29 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarBehavior: "persistent",
   fontSize: "normal",
   defaultModel: "gemini-2.5-flash",
+  customModels: [],
   temperature: 1,
   maxOutputTokens: 8192,
 };
 
 export const FONT_SIZES: Record<FontSize, number> = {
+  xsmall: 12,
   small: 13,
   normal: 14,
-  large: 15.5,
-  xlarge: 17,
+  medium: 15,
+  large: 16.5,
+  xlarge: 18,
+  xxlarge: 20,
+  huge: 22,
 };
+
+export const FONT_SIZE_ORDER: FontSize[] = [
+  "xsmall",
+  "small",
+  "normal",
+  "medium",
+  "large",
+  "xlarge",
+  "xxlarge",
+  "huge",
+];

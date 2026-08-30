@@ -41,6 +41,21 @@ export function useKeyboardShortcuts() {
         useUiStore.getState().toggleSidebar();
         return;
       }
+      if (mod && (key === "=" || key === "+" || e.code === "NumpadAdd")) {
+        e.preventDefault();
+        useSettingsStore.getState().increaseFontSize();
+        return;
+      }
+      if (mod && (key === "-" || key === "_" || e.code === "NumpadSubtract")) {
+        e.preventDefault();
+        useSettingsStore.getState().decreaseFontSize();
+        return;
+      }
+      if (mod && (key === "0" || e.code === "Numpad0")) {
+        e.preventDefault();
+        useSettingsStore.getState().resetFontSize();
+        return;
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

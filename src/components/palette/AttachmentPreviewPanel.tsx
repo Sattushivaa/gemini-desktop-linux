@@ -176,7 +176,7 @@ export function AttachmentPreviewPanel() {
     };
   }, [dragging, clampWidth, setPreviewWidth]);
 
-  const width = clampWidth(open ? previewWidth : 0);
+  const width = open ? clampWidth(previewWidth) : 0;
 
   return (
     <aside

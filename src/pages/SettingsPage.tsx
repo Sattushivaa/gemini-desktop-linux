@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, FolderOpen, KeyRound, Loader2, Save, Trash2 } from "lucide-react";
+import { Check, FolderOpen, KeyRound, Loader2, Minus, Plus, Save, Trash2 } from "lucide-react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { isTauri } from "@/lib/tauri";
 import {
@@ -25,7 +25,6 @@ import { useConversationStore } from "@/stores/conversations";
 import { MODELS } from "@/services/gemini/models";
 import { resolveApiKey, setApiKeyInNativeStore, getAppPaths } from "@/services/gemini/client";
 import type { AppPaths, FontSize, Theme } from "@/types";
-import { FONT_SIZES } from "@/types";
 import { cn } from "@/lib/utils";
 
 const TOKEN_OPTIONS = [1024, 2048, 4096, 8192, 16384, 32768];
@@ -169,12 +168,23 @@ export function SettingsPage() {
                 <SelectTrigger className="w-52">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-72">
                   {MODELS.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.name}
                     </SelectItem>
                   ))}
+                  {(settings.customModels ?? []).map((id) => (
+                    <SelectItem key={id} value={id}>
+                      {id} (Custom)
+                    </SelectItem>
+                  ))}
+                  {!MODELS.some((m) => m.id === settings.defaultModel) &&
+                    !(settings.customModels ?? []).includes(settings.defaultModel) && (
+                      <SelectItem value={settings.defaultModel}>
+                        {settings.defaultModel}
+                      </SelectItem>
+                    )}
                 </SelectContent>
               </Select>
             </PreferenceRow>
@@ -239,22 +249,48 @@ export function SettingsPage() {
                 </SelectContent>
               </Select>
             </PreferenceRow>
-            <PreferenceRow label="Interface font size">
-              <Select
-                value={settings.fontSize}
-                onValueChange={(v) => update({ fontSize: v as FontSize })}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(FONT_SIZES).map(([key, size]) => (
-                    <SelectItem key={key} value={key}>
-                      {size}px
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <PreferenceRow
+              label="Interface font size"
+              hint="Use Ctrl++ / Ctrl+- to scale text on the fly."
+            >
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="iconSm"
+                  onClick={() => useSettingsStore.getState().decreaseFontSize()}
+                  title="Decrease font size (Ctrl+-)"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </Button>
+                <Select
+                  value={settings.fontSize}
+                  onValueChange={(v) => update({ fontSize: v as FontSize })}
+                >
+                  <SelectTrigger className="w-36 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    <SelectItem value="xsmall">Extra small (12px)</SelectItem>
+                    <SelectItem value="small">Small (13px)</SelectItem>
+                    <SelectItem value="normal">Normal (14px)</SelectItem>
+                    <SelectItem value="medium">Medium (15px)</SelectItem>
+                    <SelectItem value="large">Large (16.5px)</SelectItem>
+                    <SelectItem value="xlarge">Extra large (18px)</SelectItem>
+                    <SelectItem value="xxlarge">Very large (20px)</SelectItem>
+                    <SelectItem value="huge">Huge (22px)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="iconSm"
+                  onClick={() => useSettingsStore.getState().increaseFontSize()}
+                  title="Increase font size (Ctrl++)"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </PreferenceRow>
             <PreferenceRow label="Start maximized" hint="Applies on the next launch.">
               <Switch
